@@ -31,6 +31,8 @@ That column is whatever the detail command expects:
 | `bluesky` | `user` | `thread <uri>` | `uri` |
 | `1688` | `search` | `item <url-or-offer-id>` | `offer_id` |
 | `tieba` | `search` | `read <id>` | `id` |
+| `jike` | `feed` / `search` / `user` | `post <id>` | `id` |
+| `weibo` | `feed` / `search` | `post <id>` | `id` |
 
 ## Why this matters
 
@@ -62,8 +64,10 @@ these column names a valid round-trip handle:
 - `username` / `handle` (only when the detail command keys off the user
   rather than a post)
 - `url` — only when the detail command's positional argument explicitly
-  accepts a URL (for example `read <url-or-id>` or `article <url>`). URL is
-  not a valid substitute when the detail command expects a site id.
+  accepts a URL (for example `read <url-or-id>`, `article <url>`, or help
+  text such as `Post ID or full URL`). URL is not a valid substitute when
+  the detail command only says an id comes "from URL"; callers would still
+  need to parse the URL out of band.
 - `uri` — for sites whose canonical handle is a URI scheme (e.g.
   Bluesky's `at://did:.../app.bsky.feed.post/...`).
 
@@ -82,8 +86,9 @@ The rule does NOT fire on:
 - **AI-chat / agent-session listings** (`chatgpt-app ask`, `claude new`,
   `codex ask`, ...). The rows are conversation turns inside one session,
   not separately fetchable.
-- **Topic / landing-page listings** (`tieba hot`). Their rows point to a
-  topic landing page, not to a thread entity accepted by the detail command.
+- **Topic / landing-page listings** (`tieba hot`, `weibo hot`). Their rows
+  point to a topic/search landing page, not to a post/thread entity accepted
+  by the detail command.
 - **Single-profile field listings** (`reddit user`, `lesswrong user`).
   Their shape is `[field, value]` — every row is an attribute of the
   same profile, addressed by the username arg. There is no per-row entity

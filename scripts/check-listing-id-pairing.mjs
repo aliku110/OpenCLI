@@ -86,6 +86,8 @@ const EXEMPT = new Map([
     ['discord-app/search', 'desktop UI session — message ids are not extractable from the rendered DOM'],
     ['notion/search', 'Strategy.UI Quick Find — page ids are not exposed in the rendered DOM; agents navigate via Notion UI (Cmd+P), not by id round-trip'],
     ['tieba/hot', 'hot rows are topic landing pages, not thread rows; tieba/read fetches a thread by numeric id'],
+    ['weibo/hot', 'hot rows are search topics, not posts; weibo/post fetches a post by id or mblogid'],
+    ['weibo/user', 'rows are profile-attribute fields; weibo/post fetches a post, addressed by post id or mblogid'],
 ]);
 
 /** Columns whose name implies "this is an id you can pass to detail". */
@@ -114,8 +116,21 @@ function isUrlDetailCommand(entry) {
     const primaryArg = args.find((arg) => arg?.positional || arg?.required) ?? args[0];
     if (!primaryArg) return false;
     const name = String(primaryArg.name ?? '').toLowerCase();
+    if (name === 'url' || name === 'url-or-id') return true;
+
     const help = String(primaryArg.help ?? '').toLowerCase();
-    return name === 'url' || name === 'url-or-id' || help.includes('url');
+    if (!help) return false;
+
+    // Accept only explicit "this argument may be a URL" wording. Phrases
+    // like "id from URL" mean callers must extract an id before invoking
+    // the detail command, so listing.url must not satisfy the id-pair gate.
+    return (
+        /^full\b[^()]*\burl\b/.test(help) ||
+        /\burl\s+or\s+[^()]*\bid\b/.test(help) ||
+        /\bor\s+(?:a\s+)?full\b[^()]*\burl\b/.test(help) ||
+        /\bor\s+url\b/.test(help) ||
+        /\burl\s*,\s*or\b/.test(help)
+    );
 }
 
 function isIdColumn(col, detailCommands) {

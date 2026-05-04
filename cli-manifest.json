@@ -10163,6 +10163,7 @@
       }
     ],
     "columns": [
+      "id",
       "author",
       "content",
       "likes",
@@ -10316,6 +10317,7 @@
       }
     ],
     "columns": [
+      "id",
       "author",
       "content",
       "likes",
@@ -10390,6 +10392,7 @@
       }
     ],
     "columns": [
+      "id",
       "content",
       "type",
       "likes",
@@ -18668,6 +18671,7 @@
       }
     ],
     "columns": [
+      "id",
       "author",
       "text",
       "reposts",
@@ -18819,6 +18823,7 @@
     ],
     "columns": [
       "rank",
+      "id",
       "title",
       "author",
       "time",
