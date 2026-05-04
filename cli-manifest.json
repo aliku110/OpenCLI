@@ -120,6 +120,7 @@
     ],
     "columns": [
       "rank",
+      "offer_id",
       "title",
       "price_text",
       "moq_text",
@@ -2990,6 +2991,7 @@
     ],
     "columns": [
       "rank",
+      "uri",
       "text",
       "likes",
       "reposts",
@@ -16405,7 +16407,8 @@
       "rank",
       "title",
       "discussions",
-      "description"
+      "description",
+      "url"
     ],
     "type": "js",
     "modulePath": "tieba/hot.js",
@@ -16532,10 +16535,12 @@
     ],
     "columns": [
       "rank",
+      "id",
       "title",
       "forum",
       "author",
-      "time"
+      "time",
+      "url"
     ],
     "type": "js",
     "modulePath": "tieba/search.js",

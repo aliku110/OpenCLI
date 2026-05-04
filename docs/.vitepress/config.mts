@@ -160,6 +160,20 @@ export default defineConfig({
                 { text: 'AI Workflow', link: '/developer/ai-workflow' },
               ],
             },
+            {
+              text: 'Conventions',
+              items: [
+                { text: 'Listing↔Detail ID Pairing', link: '/conventions/listing-detail-id-pairing' },
+              ],
+            },
+          ],
+          '/conventions/': [
+            {
+              text: 'Conventions',
+              items: [
+                { text: 'Listing↔Detail ID Pairing', link: '/conventions/listing-detail-id-pairing' },
+              ],
+            },
           ],
           '/advanced/': [
             {
