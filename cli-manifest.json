@@ -14343,6 +14343,80 @@
     "navigateBefore": "https://medium.com"
   },
   {
+    "site": "mempool",
+    "name": "block",
+    "description": "Fetch a Bitcoin block by hash or height (one row)",
+    "access": "read",
+    "domain": "mempool.space",
+    "strategy": "public",
+    "browser": false,
+    "args": [
+      {
+        "name": "ref",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "Block hash (64-hex) or height (integer)"
+      }
+    ],
+    "columns": [
+      "id",
+      "height",
+      "version",
+      "timestamp",
+      "txCount",
+      "size",
+      "weight",
+      "merkleRoot",
+      "previousBlockHash",
+      "mediantime",
+      "nonce",
+      "bits",
+      "difficulty",
+      "url"
+    ],
+    "type": "js",
+    "modulePath": "mempool/block.js",
+    "sourceFile": "mempool/block.js"
+  },
+  {
+    "site": "mempool",
+    "name": "tx",
+    "description": "Fetch a Bitcoin transaction by txid (one row)",
+    "access": "read",
+    "domain": "mempool.space",
+    "strategy": "public",
+    "browser": false,
+    "args": [
+      {
+        "name": "txid",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "Bitcoin transaction id (64-char hex)"
+      }
+    ],
+    "columns": [
+      "txid",
+      "version",
+      "locktime",
+      "size",
+      "weight",
+      "fee",
+      "vinCount",
+      "voutCount",
+      "totalOutputSats",
+      "confirmed",
+      "blockHeight",
+      "blockHash",
+      "blockTime",
+      "url"
+    ],
+    "type": "js",
+    "modulePath": "mempool/tx.js",
+    "sourceFile": "mempool/tx.js"
+  },
+  {
     "site": "mubu",
     "name": "doc",
     "description": "读取幕布文档内容（默认输出 Markdown，可用 --output text 输出纯文本）",
@@ -14543,6 +14617,105 @@
     "modulePath": "mubu/search.js",
     "sourceFile": "mubu/search.js",
     "navigateBefore": "https://mubu.com"
+  },
+  {
+    "site": "nominatim",
+    "name": "geocode",
+    "description": "Forward-geocode an address into lat/lon + structured address rows",
+    "access": "read",
+    "domain": "nominatim.openstreetmap.org",
+    "strategy": "public",
+    "browser": false,
+    "args": [
+      {
+        "name": "query",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "Free-text address or place name"
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "default": 10,
+        "required": false,
+        "help": "Max rows (1-50)"
+      },
+      {
+        "name": "countrycodes",
+        "type": "str",
+        "required": false,
+        "help": "Comma-separated ISO-3166-1 alpha-2 country filter (e.g. \"fr,de\")"
+      }
+    ],
+    "columns": [
+      "rank",
+      "displayName",
+      "lat",
+      "lon",
+      "type",
+      "class",
+      "importance",
+      "country",
+      "countryCode",
+      "city",
+      "state",
+      "postcode",
+      "osmType",
+      "osmId",
+      "placeId",
+      "url"
+    ],
+    "type": "js",
+    "modulePath": "nominatim/geocode.js",
+    "sourceFile": "nominatim/geocode.js"
+  },
+  {
+    "site": "nominatim",
+    "name": "reverse",
+    "description": "Reverse-geocode a lat/lon pair into a structured address",
+    "access": "read",
+    "domain": "nominatim.openstreetmap.org",
+    "strategy": "public",
+    "browser": false,
+    "args": [
+      {
+        "name": "lat",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "Latitude in decimal degrees"
+      },
+      {
+        "name": "lon",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "Longitude in decimal degrees"
+      }
+    ],
+    "columns": [
+      "displayName",
+      "lat",
+      "lon",
+      "type",
+      "class",
+      "country",
+      "countryCode",
+      "city",
+      "state",
+      "suburb",
+      "road",
+      "houseNumber",
+      "postcode",
+      "osmType",
+      "osmId",
+      "placeId",
+      "url"
+    ],
+    "type": "js",
+    "modulePath": "nominatim/reverse.js",
+    "sourceFile": "nominatim/reverse.js"
   },
   {
     "site": "notebooklm",

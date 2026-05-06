@@ -134,6 +134,8 @@ Run `opencli list` for the live registry.
 | **[nuget](./browser/nuget.md)**                   | `search` `package`                                                                                                                             | 🌐 Public    |
 | **[flathub](./browser/flathub.md)**               | `search` `app`                                                                                                                                 | 🌐 Public    |
 | **[oeis](./browser/oeis.md)**                     | `search` `sequence`                                                                                                                            | 🌐 Public    |
+| **[nominatim](./browser/nominatim.md)**           | `geocode` `reverse`                                                                                                                            | 🌐 Public    |
+| **[mempool](./browser/mempool.md)**               | `tx` `block`                                                                                                                                   | 🌐 Public    |
 
 ## Desktop Adapters
 
