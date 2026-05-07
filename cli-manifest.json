@@ -22231,6 +22231,72 @@
   },
   {
     "site": "twitter",
+    "name": "bookmark-folder",
+    "description": "Read the tweets inside a single Twitter/X bookmark folder. Get the folder id from `opencli twitter bookmark-folders`.",
+    "access": "read",
+    "domain": "x.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "folder-id",
+        "type": "string",
+        "required": true,
+        "positional": true,
+        "help": "Numeric folder id from `opencli twitter bookmark-folders`."
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "default": 20,
+        "required": false,
+        "help": "Maximum number of bookmarks to return (default 20)."
+      },
+      {
+        "name": "top-by-engagement",
+        "type": "int",
+        "default": 0,
+        "required": false,
+        "help": "When set to N>0, re-rank the folder by weighted engagement (likes×1 + retweets×3 + replies×2 + bookmarks×5 + log10(views)×0.5) and return the top N. Default 0 keeps the API's native (saved-time) ordering."
+      }
+    ],
+    "columns": [
+      "id",
+      "author",
+      "text",
+      "likes",
+      "retweets",
+      "bookmarks",
+      "created_at",
+      "url"
+    ],
+    "type": "js",
+    "modulePath": "twitter/bookmark-folder.js",
+    "sourceFile": "twitter/bookmark-folder.js",
+    "navigateBefore": "https://x.com"
+  },
+  {
+    "site": "twitter",
+    "name": "bookmark-folders",
+    "description": "List your Twitter/X bookmark folders (the user-created collections under Bookmarks). Returns folder id, name, item count, and created_at.",
+    "access": "read",
+    "domain": "x.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [],
+    "columns": [
+      "id",
+      "name",
+      "items",
+      "created_at"
+    ],
+    "type": "js",
+    "modulePath": "twitter/bookmark-folders.js",
+    "sourceFile": "twitter/bookmark-folders.js",
+    "navigateBefore": "https://x.com"
+  },
+  {
+    "site": "twitter",
     "name": "bookmarks",
     "description": "Fetch your Twitter/X bookmarks (the logged-in user's saved tweets, newest first)",
     "access": "read",
