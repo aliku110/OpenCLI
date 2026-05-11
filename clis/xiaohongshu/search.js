@@ -53,6 +53,64 @@ export function stripXhsAuthorDateSuffix(value) {
     return stripped || text;
 }
 /**
+ * Build a "scroll until enough or plateaued" IIFE used in place of a fixed
+ * `autoScroll({ times: N })`. Xiaohongshu's search results page lazy-loads
+ * ~5-7 notes per scroll, so the previous `times: 2` capped extraction at
+ * ~13 items regardless of `--limit` (see #1471). This helper drives scrolls
+ * dynamically:
+ *
+ *   - count visible `section.note-item` rows (excluding related-search
+ *     `.query-note-item` rows)
+ *   - if count >= targetCount → break (got enough)
+ *   - if two consecutive scrolls add no new rows → break (DOM plateaued,
+ *     no more lazy-load available)
+ *   - hard cap at `maxScrolls` iterations (default 15) to bound runtime
+ *
+ * Exported so the rednote adapter (same DOM shape) can reuse it.
+ */
+export function buildScrollUntilJs(targetCount, maxScrolls = 15) {
+    return `
+      (async () => {
+        const countItems = () => {
+          let count = 0;
+          for (const el of document.querySelectorAll('section.note-item')) {
+            if (!el.classList.contains('query-note-item')) count++;
+          }
+          return count;
+        };
+
+        let lastCount = countItems();
+        let plateauRounds = 0;
+        for (let i = 0; i < ${maxScrolls}; i++) {
+          if (countItems() >= ${targetCount}) break;
+          const lastHeight = document.body.scrollHeight;
+          window.scrollTo(0, lastHeight);
+          await new Promise((resolve) => {
+            let to;
+            const ob = new MutationObserver(() => {
+              if (document.body.scrollHeight > lastHeight) {
+                clearTimeout(to);
+                ob.disconnect();
+                setTimeout(resolve, 200);
+              }
+            });
+            ob.observe(document.body, { childList: true, subtree: true });
+            to = setTimeout(() => { ob.disconnect(); resolve(null); }, 2500);
+          });
+          const newCount = countItems();
+          if (newCount === lastCount) {
+            plateauRounds++;
+            if (plateauRounds >= 2) break;
+          } else {
+            plateauRounds = 0;
+            lastCount = newCount;
+          }
+        }
+        return countItems();
+      })()
+    `;
+}
+/**
  * Build the search-result extraction IIFE. The web host is baked into the
  * `normalizeUrl` fallback so relative `/explore/...` hrefs resolve to a full
  * URL on the calling site. Exported so the rednote adapter can call it with
@@ -138,8 +196,10 @@ export const command = cli({
         if (waitResult === 'login_wall') {
             throw new AuthRequiredError('www.xiaohongshu.com', 'Xiaohongshu search results are blocked behind a login wall');
         }
-        // Scroll a couple of times to load more results
-        await page.autoScroll({ times: 2 });
+        // Scroll until enough rows are rendered or the lazy-load plateaus.
+        // Replaces the previous fixed `autoScroll({ times: 2 })` which capped
+        // extraction at ~13 notes regardless of `--limit` (#1471).
+        await page.evaluate(buildScrollUntilJs(kwargs.limit));
         const payload = await page.evaluate(buildSearchExtractJs('www.xiaohongshu.com'));
         const data = Array.isArray(payload) ? payload : [];
         return data
