@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Bug Fixes
+
+* **doctor** — pass an internal browser session to the live connectivity probe so `opencli doctor` works with the explicit-session browser model.
+
 ## [1.7.17](https://github.com/jackwener/opencli/compare/v1.7.16...v1.7.17) (2026-05-12)
 
 Extension bumped to 1.0.12 (workspace → session lease routing, drop `handleSessions` handler). Major simplification pass: browser/adapter session model rewrite, `--workspace` removed, doctor surface trimmed to its core job.
