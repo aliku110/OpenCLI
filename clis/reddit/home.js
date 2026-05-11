@@ -4,6 +4,7 @@ import { cli, Strategy } from '@jackwener/opencli/registry';
 const REDDIT_HOME_MAX_LIMIT = 100;
 
 export function parseRedditHomeLimit(raw) {
+    if (raw === undefined || raw === null || raw === '') return 25;
     const n = Number(raw);
     if (!Number.isFinite(n) || !Number.isInteger(n) || n < 1 || n > REDDIT_HOME_MAX_LIMIT) {
         throw new ArgumentError(
@@ -106,6 +107,9 @@ cli({
             });
         }
         if (rows.length === 0) {
+            if (entries.length > 0) {
+                throw new CommandExecutionError('Reddit home feed entries were missing required post id anchors');
+            }
             throw new EmptyResultError('Reddit returned no posts in the personalized home feed.');
         }
         return rows;

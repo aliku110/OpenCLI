@@ -70,6 +70,17 @@ describe('reddit subreddit-info command', () => {
             .rejects.toBeInstanceOf(CommandExecutionError);
     });
 
+    it('throws CommandExecutionError for malformed 200 subreddit payloads', async () => {
+        await expect(command.func(makePage({
+            kind: 'malformed',
+            detail: 'Reddit returned malformed subreddit info for r/python (missing data.display_name).',
+        }), { name: 'python' }))
+            .rejects.toMatchObject({
+                code: 'COMMAND_EXEC',
+                message: expect.stringContaining('malformed subreddit info'),
+            });
+    });
+
     it('maps a normal subreddit payload into typed field/value rows', async () => {
         const info = {
             display_name: 'python',

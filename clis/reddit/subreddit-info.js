@@ -69,7 +69,7 @@ cli({
         }
         const info = j?.data;
         if (!info || !info.display_name) {
-          return { kind: 'missing', detail: 'Reddit returned no subreddit info for r/' + sub + '.' };
+          return { kind: 'malformed', detail: 'Reddit returned malformed subreddit info for r/' + sub + ' (missing data.display_name).' };
         }
         return { kind: 'ok', info };
       } catch (e) {
@@ -85,6 +85,9 @@ cli({
         }
         if (result?.kind === 'http') {
             throw new CommandExecutionError(`HTTP ${result.httpStatus} from ${result.where}`);
+        }
+        if (result?.kind === 'malformed') {
+            throw new CommandExecutionError(result.detail);
         }
         if (result?.kind === 'exception') {
             throw new CommandExecutionError(`subreddit-info failed: ${result.detail}`);

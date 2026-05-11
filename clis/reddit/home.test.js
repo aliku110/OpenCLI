@@ -37,11 +37,14 @@ describe('reddit home command', () => {
     });
 
     it('parseRedditHomeLimit accepts [1,100] and rejects out-of-range / non-integer without silent clamp', () => {
+        expect(parseRedditHomeLimit(undefined)).toBe(25);
+        expect(parseRedditHomeLimit(null)).toBe(25);
+        expect(parseRedditHomeLimit('')).toBe(25);
         expect(parseRedditHomeLimit(1)).toBe(1);
         expect(parseRedditHomeLimit(25)).toBe(25);
         expect(parseRedditHomeLimit(100)).toBe(100);
 
-        for (const bad of [0, -1, 101, 1.5, NaN, 'abc', '']) {
+        for (const bad of [0, -1, 101, 1.5, NaN, 'abc']) {
             expect(() => parseRedditHomeLimit(bad)).toThrow(ArgumentError);
         }
     });
@@ -104,6 +107,15 @@ describe('reddit home command', () => {
         const entries = [makeEntry('keep1'), { data: { title: 'no id' } }, makeEntry('keep2')];
         const rows = await command.func(makePage({ kind: 'ok', entries }), { limit: 25 });
         expect(rows.map((r) => r.postId)).toEqual(['keep1', 'keep2']);
+    });
+
+    it('throws CommandExecutionError when all home entries are missing post ids', async () => {
+        const entries = [{ data: { title: 'no id' } }, { data: { title: 'also no id' } }];
+        await expect(command.func(makePage({ kind: 'ok', entries }), { limit: 25 }))
+            .rejects.toMatchObject({
+                code: 'COMMAND_EXEC',
+                message: expect.stringContaining('required post id anchors'),
+            });
     });
 
     it('embeds the requested limit literally inside the evaluate script', async () => {
