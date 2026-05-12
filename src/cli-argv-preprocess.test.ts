@@ -63,15 +63,64 @@ describe('rewriteBrowserArgv', () => {
     expect(rewriteBrowserArgv(['browser'])).toEqual(['browser']);
   });
 
-  it('does not rewrite occurrences of `browser` after the first match', () => {
-    // The first browser keyword wins so a later string value (e.g. an open URL)
-    // can't collide with the rewrite.
-    expect(rewriteBrowserArgv(['browser', 'work', 'open', 'browser', 'state'])).toEqual([
+  it('only rewrites when `browser` is the root command, not deeper in argv', () => {
+    // `opencli adapter init browser/x` — the literal `browser` is a path argument,
+    // not the root command. Must not be touched.
+    expect(rewriteBrowserArgv(['adapter', 'init', 'browser', 'x'])).toEqual([
+      'adapter',
+      'init',
+      'browser',
+      'x',
+    ]);
+    // Same for URLs or arbitrary arg values that happen to contain `browser`.
+    expect(rewriteBrowserArgv(['twitter', 'tweets', 'https://browser.example.com'])).toEqual([
+      'twitter',
+      'tweets',
+      'https://browser.example.com',
+    ]);
+    // First-match heuristic must NOT rewrite when an earlier non-flag token
+    // already established a different root command.
+    expect(rewriteBrowserArgv(['list', 'browser', 'state'])).toEqual([
+      'list',
+      'browser',
+      'state',
+    ]);
+  });
+
+  it('skips leading root flags before identifying the root command', () => {
+    // `--profile` takes a value — the value is not the command.
+    expect(rewriteBrowserArgv(['--profile', 'work', 'browser', 'mercury', 'state'])).toEqual([
+      '--profile',
+      'work',
       'browser',
       '--session',
-      'work',
-      'open',
+      'mercury',
+      'state',
+    ]);
+    // Long form with `=` separator consumes one slot only.
+    expect(rewriteBrowserArgv(['--profile=work', 'browser', 'mercury', 'state'])).toEqual([
+      '--profile=work',
       'browser',
+      '--session',
+      'mercury',
+      'state',
+    ]);
+    // Boolean flags don't consume values.
+    expect(rewriteBrowserArgv(['-v', 'browser', 'mercury', 'state'])).toEqual([
+      '-v',
+      'browser',
+      '--session',
+      'mercury',
+      'state',
+    ]);
+  });
+
+  it('leaves argv alone when the root command is not `browser`, even if `browser` appears later', () => {
+    // The first browser keyword does NOT win — it must be at the root.
+    expect(rewriteBrowserArgv(['twitter', 'browser', 'work', 'state'])).toEqual([
+      'twitter',
+      'browser',
+      'work',
       'state',
     ]);
   });
