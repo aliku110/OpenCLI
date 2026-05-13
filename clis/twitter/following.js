@@ -202,12 +202,12 @@ cli({
         };
 
         // Get userId from screen_name
-        const userLookup = await page.evaluate(async (url, headers) => {
+        const userLookup = unwrapBrowserResult(await page.evaluate(async (url, headers) => {
             const resp = await fetch(url, { headers, credentials: 'include' });
             if (!resp.ok) return { error: resp.status };
             const d = await resp.json();
             return { userId: d.data?.user?.result?.rest_id || null };
-        }, buildUserByScreenNameUrl(userByScreenNameQueryId, targetUser), headers);
+        }, buildUserByScreenNameUrl(userByScreenNameQueryId, targetUser), headers));
         if (userLookup?.error === 401 || userLookup?.error === 403) {
             throw new AuthRequiredError('x.com', `Twitter user lookup failed (HTTP ${userLookup.error})`);
         }
@@ -226,10 +226,10 @@ cli({
         for (let i = 0; i < maxPages && allUsers.length < limit; i++) {
             const fetchCount = Math.min(50, limit - allUsers.length + 10);
             const apiUrl = buildFollowingUrl(followingQueryId, userId, fetchCount, cursor);
-            const data = await page.evaluate(async (url, headers) => {
+            const data = unwrapBrowserResult(await page.evaluate(async (url, headers) => {
                 const r = await fetch(url, { headers, credentials: 'include' });
                 return r.ok ? await r.json() : { error: r.status };
-            }, apiUrl, headers);
+            }, apiUrl, headers));
             if (data?.error) {
                 if (data.error === 401 || data.error === 403)
                     throw new AuthRequiredError('x.com', `Twitter following request failed (HTTP ${data.error})`);

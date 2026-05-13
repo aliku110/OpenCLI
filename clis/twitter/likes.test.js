@@ -2,6 +2,49 @@ import { describe, expect, it, vi } from 'vitest';
 import { getRegistry } from '@jackwener/opencli/registry';
 import { ArgumentError, AuthRequiredError } from '@jackwener/opencli/errors';
 import { __test__ } from './likes.js';
+
+function likesPayload() {
+    return {
+        data: {
+            user: {
+                result: {
+                    timeline_v2: {
+                        timeline: {
+                            instructions: [{
+                                entries: [{
+                                    entryId: 'tweet-1',
+                                    content: {
+                                        itemContent: {
+                                            tweet_results: {
+                                                result: {
+                                                    rest_id: '1',
+                                                    legacy: {
+                                                        full_text: 'liked post',
+                                                        favorite_count: 7,
+                                                        retweet_count: 2,
+                                                        created_at: 'now',
+                                                    },
+                                                    core: {
+                                                        user_results: {
+                                                            result: {
+                                                                legacy: { screen_name: 'alice', name: 'Alice' },
+                                                            },
+                                                        },
+                                                    },
+                                                },
+                                            },
+                                        },
+                                    },
+                                }],
+                            }],
+                        },
+                    },
+                },
+            },
+        },
+    };
+}
+
 describe('twitter likes helpers', () => {
     it('falls back when queryId contains unsafe characters', () => {
         expect(__test__.sanitizeQueryId('safe_Query-123', 'fallback')).toBe('safe_Query-123');
@@ -117,5 +160,36 @@ describe('twitter likes command', () => {
         await expect(command.func(page, { limit: 10 })).rejects.toBeInstanceOf(AuthRequiredError);
         expect(page.goto).toHaveBeenCalledWith('https://x.com/home');
         expect(page.evaluate).toHaveBeenCalledTimes(1);
+    });
+
+    it('unwraps Browser Bridge envelopes for default-self user lookup and likes payload', async () => {
+        const command = getRegistry().get('twitter/likes');
+        const page = {
+            goto: vi.fn().mockResolvedValue(undefined),
+            wait: vi.fn().mockResolvedValue(undefined),
+            getCookies: vi.fn(async () => [{ name: 'ct0', value: 'token' }]),
+            evaluate: vi.fn(async (script) => {
+                const text = String(script);
+                if (text.includes('AppTabBar_Profile_Link')) {
+                    return { session: 'site:twitter', data: '/viewer' };
+                }
+                if (text.includes('operationName')) return null;
+                if (text.includes('/UserByScreenName')) {
+                    return { session: 'site:twitter', data: '42' };
+                }
+                if (text.includes('/Likes')) {
+                    return { session: 'site:twitter', data: likesPayload() };
+                }
+                throw new Error(`Unexpected evaluate: ${text.slice(0, 80)}`);
+            }),
+        };
+
+        const rows = await command.func(page, { limit: 1 });
+
+        expect(rows).toHaveLength(1);
+        expect(rows[0]).toMatchObject({ id: '1', author: 'alice', text: 'liked post' });
+        const likesCall = page.evaluate.mock.calls.find(([script]) => String(script).includes('/Likes')) || [];
+        expect(decodeURIComponent(String(likesCall[0]))).toContain('"userId":"42"');
+        expect(decodeURIComponent(String(likesCall[0]))).not.toContain('[object Object]');
     });
 });

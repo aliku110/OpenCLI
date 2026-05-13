@@ -188,14 +188,14 @@ cli({
             'X-Twitter-Active-User': 'yes',
         });
         // Get userId from screen_name
-        const userId = await page.evaluate(`async () => {
+        const userId = unwrapBrowserResult(await page.evaluate(`async () => {
       const screenName = ${JSON.stringify(username)};
       const url = ${JSON.stringify(buildUserByScreenNameUrl(userByScreenNameQueryId, username))};
       const resp = await fetch(url, { headers: ${headers}, credentials: 'include' });
       if (!resp.ok) return null;
       const d = await resp.json();
       return d.data?.user?.result?.rest_id || null;
-    }`);
+    }`));
         if (!userId) {
             throw new CommandExecutionError(`Could not find user @${username}`);
         }
@@ -205,10 +205,10 @@ cli({
         for (let i = 0; i < 5 && allTweets.length < limit; i++) {
             const fetchCount = Math.min(100, limit - allTweets.length + 10);
             const apiUrl = buildLikesUrl(likesQueryId, userId, fetchCount, cursor);
-            const data = await page.evaluate(`async () => {
+            const data = unwrapBrowserResult(await page.evaluate(`async () => {
         const r = await fetch("${apiUrl}", { headers: ${headers}, credentials: 'include' });
         return r.ok ? await r.json() : { error: r.status };
-      }`);
+      }`));
             if (data?.error) {
                 if (allTweets.length === 0)
                     throw new CommandExecutionError(`HTTP ${data.error}: Failed to fetch likes. queryId may have expired.`);
