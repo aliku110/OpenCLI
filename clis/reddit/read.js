@@ -344,7 +344,10 @@ cli({
               for (var c = 0; c < rec.stub.data.children.length; c++) {
                 var childId = rec.stub.data.children[c];
                 var replacement = fetchedById[childId] || fetchedById['t1_' + childId];
-                if (!replacement || !replacement.data) continue;
+                if (!replacement || !replacement.data) {
+                  expandMeta.errors.push('missing: ' + childId + ' parent=' + expectedParent);
+                  continue;
+                }
                 var key = thingKey(replacement);
                 if (key && inserted[key]) continue;
                 if (replacement.data.parent_id !== expectedParent) {

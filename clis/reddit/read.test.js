@@ -287,6 +287,29 @@ describe('reddit read adapter', () => {
         })).rejects.toBeInstanceOf(CommandExecutionError);
     });
 
+    it('fails expand-more when Reddit omits a requested child instead of silently dropping the stub', async () => {
+        const fetchMock = vi.fn(async (url) => {
+            if (String(url).startsWith('/comments/')) {
+                return jsonResponse(redditPostEnvelope([moreThing('more_top', ['b', 'c'])]));
+            }
+            if (String(url) === '/api/morechildren') {
+                return jsonResponse({
+                    json: {
+                        errors: [],
+                        data: { things: [commentThing('b', 'B')] },
+                    },
+                });
+            }
+            throw new Error(`unexpected URL ${url}`);
+        });
+        const page = makeRuntimePage(fetchMock);
+
+        await expect(command.func(page, {
+            'post-id': 'abc123',
+            'expand-more': true,
+        })).rejects.toBeInstanceOf(CommandExecutionError);
+    });
+
     it('uses 5-kind discriminated union keys that DO NOT collide with declared columns', () => {
         // Read the evaluate template once to assert the intermediate keys we
         // return on the browser side never name any of `type` / `author` /
