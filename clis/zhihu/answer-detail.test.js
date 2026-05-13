@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { getRegistry } from '@jackwener/opencli/registry';
-import { AuthRequiredError, CliError } from '@jackwener/opencli/errors';
+import { ArgumentError, AuthRequiredError, CommandExecutionError, EmptyResultError } from '@jackwener/opencli/errors';
 import './answer-detail.js';
 import { __test__ as helpers } from './answer-detail.js';
 
@@ -61,7 +61,7 @@ describe('zhihu answer-detail', () => {
         expect(goto).toHaveBeenCalledWith('https://www.zhihu.com/answer/1937205528846655537');
     });
 
-    it('accepts a full Zhihu answer URL as id, preserving full precision', async () => {
+    it('accepts a full Zhihu answer URL as id, preserving full id precision', async () => {
         const cmd = getRegistry().get('zhihu/answer-detail');
         const evaluate = vi.fn().mockResolvedValue({
             // Same precision-loss trap as above: `data.id` from the
@@ -73,15 +73,18 @@ describe('zhihu answer-detail', () => {
             voteup_count: 1,
             comment_count: 0,
             content: '<p>hello</p>',
-            question: { id: 630517537, title: 'Q' },
+            // The input question id is the string-safe source of truth
+            // when API JSON numeric ids have already lost precision.
+            question: { id: 2021881398772981800, title: 'Q' },
         });
         const page = { goto: vi.fn().mockResolvedValue(undefined), evaluate };
         const rows = await cmd.func(page, {
-            id: 'https://www.zhihu.com/question/630517537/answer/1937205528846655537',
+            id: 'https://www.zhihu.com/question/2021881398772981878/answer/1937205528846655537',
             'max-content': 0,
         });
         expect(rows[0].id).toBe('1937205528846655537');
-        expect(rows[0].url).toBe('https://www.zhihu.com/question/630517537/answer/1937205528846655537');
+        expect(rows[0].question_id).toBe('2021881398772981878');
+        expect(rows[0].url).toBe('https://www.zhihu.com/question/2021881398772981878/answer/1937205528846655537');
         expect(evaluate.mock.calls[0][0]).toContain('/api/v4/answers/1937205528846655537?');
     });
 
@@ -93,13 +96,53 @@ describe('zhihu answer-detail', () => {
             voteup_count: 0,
             comment_count: 0,
             content: '<p>x</p>',
-            question: { id: 111, title: 'Q' },
+            question: { id: 0, title: 'Q' },
         });
         const page = { goto: vi.fn().mockResolvedValue(undefined), evaluate };
-        const rows = await cmd.func(page, { id: 'answer:111:999', 'max-content': 0 });
+        const rows = await cmd.func(page, { id: 'answer:2021881398772981878:999', 'max-content': 0 });
         expect(rows[0].id).toBe('999');
-        expect(rows[0].question_id).toBe('111');
+        expect(rows[0].question_id).toBe('2021881398772981878');
         expect(evaluate.mock.calls[0][0]).toContain('/api/v4/answers/999?');
+    });
+
+    it('uses the redirected canonical URL as question id source for bare answer ids', async () => {
+        const cmd = getRegistry().get('zhihu/answer-detail');
+        const page = {
+            goto: vi.fn().mockResolvedValue(undefined),
+            getCurrentUrl: vi.fn().mockResolvedValue('https://www.zhihu.com/question/2021881398772981878/answer/999'),
+            evaluate: vi.fn().mockResolvedValue({
+                id: 999,
+                author: { name: 'bob' },
+                voteup_count: 0,
+                comment_count: 0,
+                content: '<p>x</p>',
+                question: { id: 2021881398772981800, title: 'Q' },
+            }),
+        };
+        const rows = await cmd.func(page, { id: '999', 'max-content': 0 });
+        expect(rows[0].question_id).toBe('2021881398772981878');
+        expect(rows[0].url).toBe('https://www.zhihu.com/question/2021881398772981878/answer/999');
+    });
+
+    it('uses API question url as a string-safe fallback when the browser URL is unavailable', async () => {
+        const cmd = getRegistry().get('zhihu/answer-detail');
+        const page = {
+            goto: vi.fn().mockResolvedValue(undefined),
+            evaluate: vi.fn().mockResolvedValue({
+                id: 999,
+                author: { name: 'bob' },
+                voteup_count: 0,
+                comment_count: 0,
+                content: '<p>x</p>',
+                question: {
+                    id: 2021881398772981800,
+                    url: 'https://www.zhihu.com/api/v4/questions/2021881398772981878',
+                    title: 'Q',
+                },
+            }),
+        };
+        const rows = await cmd.func(page, { id: '999', 'max-content': 0 });
+        expect(rows[0].question_id).toBe('2021881398772981878');
     });
 
     it('returns the full stripped body when --max-content is 0 (default)', async () => {
@@ -160,16 +203,22 @@ describe('zhihu answer-detail', () => {
         await expect(cmd.func(page, { id: '1', 'max-content': 0 })).rejects.toBeInstanceOf(AuthRequiredError);
     });
 
-    it('maps other HTTP failures to CliError FETCH_ERROR', async () => {
+    it('maps 404 to EmptyResultError', async () => {
+        const cmd = getRegistry().get('zhihu/answer-detail');
+        const page = {
+            goto: vi.fn().mockResolvedValue(undefined),
+            evaluate: vi.fn().mockResolvedValue({ __httpError: 404 }),
+        };
+        await expect(cmd.func(page, { id: '1', 'max-content': 0 })).rejects.toBeInstanceOf(EmptyResultError);
+    });
+
+    it('maps other HTTP failures to CommandExecutionError', async () => {
         const cmd = getRegistry().get('zhihu/answer-detail');
         const page = {
             goto: vi.fn().mockResolvedValue(undefined),
             evaluate: vi.fn().mockResolvedValue({ __httpError: 500 }),
         };
-        await expect(cmd.func(page, { id: '1', 'max-content': 0 })).rejects.toMatchObject({
-            code: 'FETCH_ERROR',
-            message: 'Zhihu answer detail request failed (HTTP 500)',
-        });
+        await expect(cmd.func(page, { id: '1', 'max-content': 0 })).rejects.toBeInstanceOf(CommandExecutionError);
     });
 
     it('treats a null evaluate response as a fetch error', async () => {
@@ -178,16 +227,50 @@ describe('zhihu answer-detail', () => {
             goto: vi.fn().mockResolvedValue(undefined),
             evaluate: vi.fn().mockResolvedValue(null),
         };
-        await expect(cmd.func(page, { id: '1', 'max-content': 0 })).rejects.toMatchObject({
-            code: 'FETCH_ERROR',
-            message: 'Zhihu answer detail request failed',
-        });
+        await expect(cmd.func(page, { id: '1', 'max-content': 0 })).rejects.toBeInstanceOf(CommandExecutionError);
+    });
+
+    it('wraps browser navigation failures as CommandExecutionError', async () => {
+        const cmd = getRegistry().get('zhihu/answer-detail');
+        const page = {
+            goto: vi.fn().mockRejectedValue(new Error('navigation failed')),
+            evaluate: vi.fn(),
+        };
+        await expect(cmd.func(page, { id: '1', 'max-content': 0 })).rejects.toBeInstanceOf(CommandExecutionError);
+        expect(page.evaluate).not.toHaveBeenCalled();
+    });
+
+    it('wraps malformed JSON responses as CommandExecutionError', async () => {
+        const cmd = getRegistry().get('zhihu/answer-detail');
+        const page = {
+            goto: vi.fn().mockResolvedValue(undefined),
+            evaluate: vi.fn().mockResolvedValue({ __malformedJson: 'Unexpected token <' }),
+        };
+        await expect(cmd.func(page, { id: '1', 'max-content': 0 })).rejects.toBeInstanceOf(CommandExecutionError);
+    });
+
+    it('rejects in-band error payloads instead of returning empty success rows', async () => {
+        const cmd = getRegistry().get('zhihu/answer-detail');
+        const page = {
+            goto: vi.fn().mockResolvedValue(undefined),
+            evaluate: vi.fn().mockResolvedValue({ error: { message: 'not found' } }),
+        };
+        await expect(cmd.func(page, { id: '1', 'max-content': 0 })).rejects.toBeInstanceOf(CommandExecutionError);
+    });
+
+    it('rejects payloads missing answer content instead of fabricating a row', async () => {
+        const cmd = getRegistry().get('zhihu/answer-detail');
+        const page = {
+            goto: vi.fn().mockResolvedValue(undefined),
+            evaluate: vi.fn().mockResolvedValue({ id: 1, author: { name: 'ghost' } }),
+        };
+        await expect(cmd.func(page, { id: '1', 'max-content': 0 })).rejects.toBeInstanceOf(CommandExecutionError);
     });
 
     it('rejects non-numeric answer ids before navigation', async () => {
         const cmd = getRegistry().get('zhihu/answer-detail');
         const page = { goto: vi.fn(), evaluate: vi.fn() };
-        await expect(cmd.func(page, { id: "abc'; alert(1); //", 'max-content': 0 })).rejects.toBeInstanceOf(CliError);
+        await expect(cmd.func(page, { id: "abc'; alert(1); //", 'max-content': 0 })).rejects.toBeInstanceOf(ArgumentError);
         expect(page.goto).not.toHaveBeenCalled();
         expect(page.evaluate).not.toHaveBeenCalled();
     });
@@ -195,14 +278,22 @@ describe('zhihu answer-detail', () => {
     it('rejects negative --max-content before navigation', async () => {
         const cmd = getRegistry().get('zhihu/answer-detail');
         const page = { goto: vi.fn(), evaluate: vi.fn() };
-        await expect(cmd.func(page, { id: '1', 'max-content': -5 })).rejects.toBeInstanceOf(CliError);
+        await expect(cmd.func(page, { id: '1', 'max-content': -5 })).rejects.toBeInstanceOf(ArgumentError);
         expect(page.goto).not.toHaveBeenCalled();
     });
 
-    it('rejects unrelated URLs before navigation', async () => {
+    it('rejects invalid URL identities before navigation', async () => {
         const cmd = getRegistry().get('zhihu/answer-detail');
         const page = { goto: vi.fn(), evaluate: vi.fn() };
-        await expect(cmd.func(page, { id: 'https://example.com/foo/bar', 'max-content': 0 })).rejects.toBeInstanceOf(CliError);
+        for (const id of [
+            'https://example.com/foo/bar',
+            'http://www.zhihu.com/question/10/answer/123',
+            'https://www.zhihu.com/question/10/answer/123/extra',
+            'https://www.zhihu.com.evil.com/question/10/answer/123',
+            'https://user:pass@www.zhihu.com/question/10/answer/123',
+        ]) {
+            await expect(cmd.func(page, { id, 'max-content': 0 })).rejects.toBeInstanceOf(ArgumentError);
+        }
         expect(page.goto).not.toHaveBeenCalled();
     });
 });
@@ -217,7 +308,16 @@ describe('zhihu answer-detail helpers', () => {
         expect(helpers.stripHtml('a<br>b<br/>c')).toBe('a\nb\nc');
     });
 
-    it('extractAnswerId handles all three input shapes', () => {
+    it('parseAnswerTarget handles exact input shapes', () => {
+        expect(helpers.parseAnswerTarget('123')).toEqual({ answerId: '123', questionId: '' });
+        expect(helpers.parseAnswerTarget('answer:10:123')).toEqual({ answerId: '123', questionId: '10' });
+        expect(helpers.parseAnswerTarget('https://www.zhihu.com/question/10/answer/123')).toEqual({ answerId: '123', questionId: '10' });
+        expect(helpers.parseAnswerTarget('https://zhihu.com/answer/123?utm=1#x')).toEqual({ answerId: '123', questionId: '' });
+        expect(helpers.parseAnswerTarget('http://www.zhihu.com/question/10/answer/123')).toBeNull();
+        expect(helpers.parseAnswerTarget('https://www.zhihu.com/question/10/answer/123/extra')).toBeNull();
+    });
+
+    it('extractAnswerId keeps the legacy helper contract for tests', () => {
         expect(helpers.extractAnswerId('123')).toBe('123');
         expect(helpers.extractAnswerId('answer:10:123')).toBe('123');
         expect(helpers.extractAnswerId('https://www.zhihu.com/question/10/answer/123')).toBe('123');
