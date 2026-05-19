@@ -173,23 +173,6 @@ When the site you need is not yet covered, use the `opencli-adapter-author` skil
 
 `opencli browser *` requires an explicit `<session>` positional, uses a foreground browser window by default, and keeps that session's tab lease until `opencli browser <session> close` or idle cleanup. Browser-backed adapters use a background adapter window and release one-shot tab leases by default. Interactive adapters can declare `siteSession: 'persistent'` to keep a stable site tab for continuity; pass `--site-session ephemeral` for a one-shot tab.
 
-## For Developers
-
-Install from source:
-
-```bash
-git clone git@github.com:jackwener/opencli.git
-cd opencli
-npm install
-npm run build
-npm link
-```
-
-To load the source Browser Bridge extension:
-
-1. Open `chrome://extensions` and enable **Developer mode**.
-2. Click **Load unpacked** and select this repository's `extension/` directory.
-
 ## Built-in Commands
 
 | Site | Commands |
