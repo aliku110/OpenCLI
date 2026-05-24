@@ -184,34 +184,54 @@ async function pollCaptureMap(page) {
     }
     return captureMap;
 }
-// Fresh-published notes return title: "" from /note/analyze/list (the field
-// only populates once xhs's backend has indexed the content). Scrape the
-// /new/note-manager card DOM as a secondary source so freshly-published
-// notes still get a title even before backend indexing catches up.
+// Fresh-published notes return title: "" from /note/analyze/list. Scrape the
+// /new/note-manager card DOM (under its "全部笔记" tab, which surfaces every
+// state including 审核中) so the rows the API leaves empty still get the
+// derived title that the note-manager UI shows.
 async function fetchNoteManagerTitleMap(page, neededCount) {
     const map = new Map();
+    const scrapeCards = async () => {
+        const cards = await page.evaluate(`() => {
+      const noteIdRe = /"noteId":"([0-9a-f]{24})"/;
+      return Array.from(document.querySelectorAll('div.note[data-impression], div.note')).map((card) => {
+        const impression = card.getAttribute('data-impression') || '';
+        const id = impression.match(noteIdRe)?.[1] || '';
+        const title = (card.querySelector('.title, .raw')?.innerText || '').trim();
+        return { id, title };
+      }).filter((entry) => entry.id && entry.title);
+    }`);
+        for (const card of Array.isArray(cards) ? cards : []) {
+            if (!map.has(card.id)) map.set(card.id, card.title);
+        }
+    };
+    // Scroll the first scrollable ancestor of a note card to the bottom so
+    // the list lazy-loads the rest of its rows. Page-level scrollTo does not
+    // work because the cards live inside an inner overflow-auto container.
+    const scrollInnerListToBottom = async () => {
+        return page.evaluate(`(() => {
+      const firstCard = document.querySelector('div.note[data-impression]');
+      let el = firstCard && firstCard.parentElement;
+      while (el) {
+        const s = window.getComputedStyle(el);
+        if ((s.overflowY === 'auto' || s.overflowY === 'scroll') && el.scrollHeight > el.clientHeight + 10) {
+          el.scrollTop = el.scrollHeight;
+          return true;
+        }
+        el = el.parentElement;
+      }
+      return false;
+    })()`);
+    };
     try {
         await page.goto('https://creator.xiaohongshu.com/new/note-manager');
-        await page.wait(2);
-        // The note-manager renders 10 cards per scroll batch and lazy-loads more
-        // on PageDown. Scroll enough batches to cover all caller-requested ids.
-        const scrollBatches = Math.max(1, Math.ceil(neededCount / NOTE_ANALYZE_PAGE_SIZE) + 1);
-        for (let i = 0; i < scrollBatches; i++) {
-            const cards = await page.evaluate(`() => {
-        const noteIdRe = /"noteId":"([0-9a-f]{24})"/;
-        return Array.from(document.querySelectorAll('div.note[data-impression], div.note')).map((card) => {
-          const impression = card.getAttribute('data-impression') || '';
-          const id = impression.match(noteIdRe)?.[1] || '';
-          const title = (card.querySelector('.title, .raw')?.innerText || '').trim();
-          return { id, title };
-        }).filter((entry) => entry.id && entry.title);
-      }`);
-            for (const card of Array.isArray(cards) ? cards : []) {
-                if (!map.has(card.id)) map.set(card.id, card.title);
-            }
-            if (map.size >= neededCount) break;
-            await page.pressKey('PageDown');
+        // Poll for the initial hydration batch and then scroll the inner list
+        // container to surface the rest of the rows. The all-notes tab is the
+        // default state so no tab click is needed here.
+        for (let i = 0; i < 12; i++) {
             await page.wait(1);
+            await scrapeCards();
+            if (map.size >= neededCount) return map;
+            await scrollInnerListToBottom();
         }
         return map;
     }
