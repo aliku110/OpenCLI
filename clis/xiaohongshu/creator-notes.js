@@ -108,6 +108,12 @@ function mapAnalyzeItems(items) {
         url: buildNoteDetailUrl(item.id),
     }));
 }
+function unwrapEvaluateResult(payload) {
+    if (payload && typeof payload === 'object' && !Array.isArray(payload) && 'session' in payload && 'data' in payload) {
+        return payload.data;
+    }
+    return payload;
+}
 // Capture the dashboard's signed /api/galaxy/* responses on window.__xhsCapture
 // since a direct fetch() from page.evaluate bypasses the x-s signing and gets 406.
 async function installXhsFetchCaptureHook(page) {
@@ -153,12 +159,41 @@ async function installXhsFetchCaptureHook(page) {
     window.XMLHttpRequest = HookedXHR;
   })()`);
 }
+function parseCaptureMapPayload(raw) {
+    const payload = unwrapEvaluateResult(raw);
+    if (typeof payload === 'string') {
+        try {
+            return JSON.parse(payload);
+        }
+        catch {
+            return {};
+        }
+    }
+    if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+        return payload;
+    }
+    return {};
+}
+function getAnalyzeListPageNumber(url) {
+    try {
+        const parsed = new URL(url, 'https://creator.xiaohongshu.com');
+        const pageNum = Number.parseInt(parsed.searchParams.get('page_num') || '', 10);
+        if (Number.isFinite(pageNum) && pageNum > 0)
+            return pageNum;
+    }
+    catch { }
+    const match = String(url || '').match(/[?&]page_num=(\d+)/);
+    const pageNum = Number.parseInt(match?.[1] || '', 10);
+    return Number.isFinite(pageNum) && pageNum > 0 ? pageNum : Number.MAX_SAFE_INTEGER;
+}
 function harvestAnalyzeListCaptures(captureMap) {
     const items = [];
     const seen = new Set();
     let total = 0;
-    for (const [url, capture] of Object.entries(captureMap)) {
-        if (!url.includes('/note/analyze/list')) continue;
+    const entries = Object.entries(captureMap)
+        .filter(([url]) => url.includes('/note/analyze/list'))
+        .sort(([a], [b]) => getAnalyzeListPageNumber(a) - getAnalyzeListPageNumber(b));
+    for (const [url, capture] of entries) {
         if (!capture?.ok) continue;
         try {
             const json = JSON.parse(capture.body);
@@ -174,12 +209,17 @@ function harvestAnalyzeListCaptures(captureMap) {
     }
     return { items, total };
 }
+function isAnalyzeCaptureComplete(items, total, limit) {
+    if (total <= 0)
+        return true;
+    return items.length >= Math.min(total, limit);
+}
 async function pollCaptureMap(page) {
     let captureMap = {};
     for (let i = 0; i < CAPTURE_POLL_ATTEMPTS; i++) {
         await page.wait(CAPTURE_POLL_INTERVAL_S);
         const raw = await page.evaluate('JSON.stringify(window.__xhsCapture || {})');
-        captureMap = typeof raw === 'string' ? JSON.parse(raw) : {};
+        captureMap = parseCaptureMapPayload(raw);
         if (Object.keys(captureMap).some((url) => url.includes('/note/analyze/list'))) break;
     }
     return captureMap;
@@ -191,7 +231,7 @@ async function pollCaptureMap(page) {
 async function fetchNoteManagerTitleMap(page, neededCount) {
     const map = new Map();
     const scrapeCards = async () => {
-        const cards = await page.evaluate(`() => {
+        const cards = unwrapEvaluateResult(await page.evaluate(`() => {
       const noteIdRe = /"noteId":"([0-9a-f]{24})"/;
       return Array.from(document.querySelectorAll('div.note[data-impression], div.note')).map((card) => {
         const impression = card.getAttribute('data-impression') || '';
@@ -199,7 +239,7 @@ async function fetchNoteManagerTitleMap(page, neededCount) {
         const title = (card.querySelector('.title, .raw')?.innerText || '').trim();
         return { id, title };
       }).filter((entry) => entry.id && entry.title);
-    }`);
+    }`));
         for (const card of Array.isArray(cards) ? cards : []) {
             if (!map.has(card.id)) map.set(card.id, card.title);
         }
@@ -208,7 +248,7 @@ async function fetchNoteManagerTitleMap(page, neededCount) {
     // the list lazy-loads the rest of its rows. Page-level scrollTo does not
     // work because the cards live inside an inner overflow-auto container.
     const scrollInnerListToBottom = async () => {
-        return page.evaluate(`(() => {
+        return unwrapEvaluateResult(await page.evaluate(`(() => {
       const firstCard = document.querySelector('div.note[data-impression]');
       let el = firstCard && firstCard.parentElement;
       while (el) {
@@ -220,7 +260,7 @@ async function fetchNoteManagerTitleMap(page, neededCount) {
         el = el.parentElement;
       }
       return false;
-    })()`);
+    })()`));
     };
     try {
         await page.goto('https://creator.xiaohongshu.com/new/note-manager');
@@ -254,7 +294,7 @@ async function fetchCreatorNotesByCapture(page, limit) {
     const totalPages = total > 0 ? Math.ceil(total / NOTE_ANALYZE_PAGE_SIZE) : 1;
     const neededPages = Math.min(totalPages, Math.ceil(limit / NOTE_ANALYZE_PAGE_SIZE));
     for (let pageNum = 2; pageNum <= neededPages && items.length < limit; pageNum++) {
-        const clicked = await page.evaluate(`(() => {
+        const clicked = unwrapEvaluateResult(await page.evaluate(`(() => {
       const target = String(${pageNum});
       // .d-pagination-page renders the page number doubled (a visible span +
       // an accessibility span), so textContent for page 2 reads "22". Match
@@ -266,21 +306,25 @@ async function fetchCreatorNotesByCapture(page, limit) {
       });
       if (match) { match.click(); return true; }
       return false;
-    })()`);
+    })()`));
         if (!clicked) break;
         const before = items.length;
+        let advanced = false;
         for (let attempt = 0; attempt < CAPTURE_POLL_ATTEMPTS; attempt++) {
             await page.wait(CAPTURE_POLL_INTERVAL_S);
             const raw = await page.evaluate('JSON.stringify(window.__xhsCapture || {})');
-            captureMap = typeof raw === 'string' ? JSON.parse(raw) : {};
+            captureMap = parseCaptureMapPayload(raw);
             const harvested = harvestAnalyzeListCaptures(captureMap);
             if (harvested.items.length > before) {
                 items = harvested.items;
                 total = Math.max(total, harvested.total);
+                advanced = true;
                 break;
             }
         }
+        if (!advanced) break;
     }
+    if (!isAnalyzeCaptureComplete(items, total, limit)) return [];
     const notes = mapAnalyzeItems(items).slice(0, limit);
     const missingTitles = notes.filter((note) => !note.title).length;
     if (missingTitles > 0) {
@@ -419,3 +463,9 @@ cli({
         }));
     },
 });
+export const __test__ = {
+    harvestAnalyzeListCaptures,
+    isAnalyzeCaptureComplete,
+    parseCaptureMapPayload,
+    unwrapEvaluateResult,
+};
