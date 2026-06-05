@@ -1072,6 +1072,25 @@ async function collectOwnedGroupCandidates(role) {
     } catch {
     }
   }
+  const ownedPreferredTabIds = /* @__PURE__ */ new Set();
+  for (const [leaseKey, session] of automationSessions.entries()) {
+    if (!session.owned || getOwnedWindowRole(leaseKey) !== role || session.preferredTabId === null) continue;
+    ownedPreferredTabIds.add(session.preferredTabId);
+  }
+  if (ownedPreferredTabIds.size > 0) {
+    try {
+      const allGroups = await chrome.tabGroups.query({});
+      for (const group of allGroups) {
+        if (group.title) continue;
+        if (groupsById.has(group.id)) continue;
+        const tabsInGroup = await chrome.tabs.query({ groupId: group.id });
+        if (tabsInGroup.some((tab) => tab.id !== void 0 && ownedPreferredTabIds.has(tab.id))) {
+          groupsById.set(group.id, group);
+        }
+      }
+    } catch {
+    }
+  }
   const candidates = await Promise.all([...groupsById.values()].map(toOwnedContainerGroupCandidate));
   return candidates.filter((candidate) => candidate !== null);
 }
@@ -1132,19 +1151,16 @@ async function createOwnedGroupWithRollback(role, windowId, ids) {
   if (ids.length === 0) throw new Error(`Cannot create ${role} tab group without tabs`);
   await ensureTabsInWindow(ids, windowId);
   const groupId = await chrome.tabs.group({ tabIds: ids, createProperties: { windowId } });
-  try {
-    const group = await chrome.tabGroups.update(groupId, {
-      color: AUTOMATION_TAB_GROUP_COLOR,
-      title: CONTAINER_TAB_GROUP_TITLE[role],
-      collapsed: false
-    });
-    updateOwnedSessionWindowForTabs(role, ids, group.windowId);
-    return { id: group.id, windowId: group.windowId, title: group.title };
-  } catch (err) {
-    await chrome.tabs.ungroup(ids).catch(() => {
-    });
-    throw err;
-  }
+  ownedContainers[role].groupId = groupId;
+  ownedContainers[role].windowId = windowId;
+  await persistRuntimeState();
+  const group = await chrome.tabGroups.update(groupId, {
+    color: AUTOMATION_TAB_GROUP_COLOR,
+    title: CONTAINER_TAB_GROUP_TITLE[role],
+    collapsed: false
+  });
+  updateOwnedSessionWindowForTabs(role, ids, group.windowId);
+  return { id: group.id, windowId: group.windowId, title: group.title };
 }
 async function ensureOwnedContainerGroup(role, fallbackWindowId, tabIds) {
   const ids = [...new Set(tabIds.filter((id) => id !== void 0))];
@@ -1241,6 +1257,7 @@ async function ensureOwnedContainerWindowUnlocked(role, initialUrl, mode = "back
     type: "normal"
   });
   container.windowId = win.id;
+  await persistRuntimeState();
   console.log(`[opencli] Created owned ${role} window ${container.windowId} (start=${startUrl})`);
   const tabs = await chrome.tabs.query({ windowId: win.id });
   const initialTabId = tabs[0]?.id;
